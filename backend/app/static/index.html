@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Razorpay Autonomous Agent Merchant System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <!-- Official Razorpay Standard Checkout SDK -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div class="brand-info">
+          <h1>Razorpay Autonomous Merchant</h1>
+          <span class="badge" id="header-mode-badge">🧪 MOCK SANDBOX</span>
+          <span class="badge badge-core">SHARED POLICY ENGINE</span>
+          <span class="badge badge-test" id="header-chain-badge">🛡️ HASH-CHAIN INTACT</span>
+        </div>
+      </div>
+      <div class="header-metrics">
+        <div class="metric-card">
+          <span class="metric-label">Daily Spend Volume</span>
+          <span class="metric-val" id="header-daily-spend">₹0.00 / ₹1,00,00,000</span>
+          <div class="progress-bar"><div class="progress-fill" id="header-spend-progress" style="width: 0%;"></div></div>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Policy Guard Status</span>
+          <span class="metric-val text-success">🟢 Active & Bounded</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="audit-tab">📋 Live Audit & Policy Engine</button>
+      <button class="nav-tab" data-tab="chat-tab">💬 Human Conversational Commerce</button>
+      <button class="nav-tab" data-tab="sim-tab">🤖 Autonomous AI Buyer Simulator</button>
+      <button class="nav-tab" data-tab="ads-tab">📢 Multilingual Ad Growth Engine</button>
+      <button class="nav-tab" data-tab="acp-tab">🌐 ACP Feed & AP2 Mandates</button>
+      <button class="nav-tab" data-tab="chaos-tab">⚡ Chaos Lab & Money Lifecycle</button>
+    </nav>
+
+    <!-- TAB 1: Audit Log & Policy Engine -->
+    <main class="tab-content active" id="audit-tab">
+      <div class="dashboard-grid">
+        <div class="panel main-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Unified Transaction Audit Trail</h2>
+              <p class="subtitle">Every money action is explainable, bounded, gated, and cryptographically hash-chained (SHA-256).</p>
+            </div>
+            <div class="table-actions">
+              <button class="btn btn-secondary btn-sm" id="btn-verify-chain">🔐 Verify Cryptographic Chain</button>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-audit">🔄 Refresh</button>
+              <select id="audit-filter-actor" class="select-sm">
+                <option value="">All Actors</option>
+                <option value="ad_human">Human Buyers</option>
+                <option value="ai_agent">AI Agents</option>
+                <option value="admin">Merchant Admins</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Actor</th>
+                  <th>SKU</th>
+                  <th>Discount</th>
+                  <th>Order Value</th>
+                  <th>Decision</th>
+                  <th>Status</th>
+                  <th>Explainable Policy Reason</th>
+                  <th>Razorpay Order ID</th>
+                  <th>Hash Verification</th>
+                </tr>
+              </thead>
+              <tbody id="audit-table-body">
+                <tr><td colspan="10" class="text-center text-muted">Loading audit entries...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="side-col">
+          <!-- Policy Rules Card -->
+          <div class="panel">
+            <h3>🛡️ Policy Engine Invariants</h3>
+            <ul class="policy-list">
+              <li><strong>SKU Discount Bound:</strong> Strict rejection if requested discount &gt; SKU cap.</li>
+              <li><strong>Gated Threshold:</strong> Orders &gt; ₹50k held for admin authorization.</li>
+              <li><strong>Dynamic Trust Modulation:</strong> Laplace-smoothed agent trust score.</li>
+              <li><strong>Daily Spend Ceiling:</strong> Mutex-guarded daily budget cap (₹1 Crore).</li>
+              <li><strong>Strict Idempotency:</strong> Safe replay on concurrent duplicate checkouts.</li>
+              <li><strong>Cryptographic Tamper-Evidence:</strong> SHA-256 hash chaining of audit records.</li>
+            </ul>
+          </div>
+
+          <!-- Trust Score Board -->
+          <div class="panel">
+            <h3>🎯 Agent Trust Score Leaderboard</h3>
+            <div id="trust-score-container" class="trust-list">
+              <p class="text-muted text-sm">No agent activity recorded yet.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- TAB 2: Human Conversational Chat -->
+    <section class="tab-content" id="chat-tab">
+      <div class="chat-layout">
+        <div class="panel chat-panel">
+          <div class="chat-header">
+            <div class="avatar">🛍️</div>
+            <div style="flex:1;">
+              <h3>AI Multilingual Sales Assistant</h3>
+              <p class="subtitle">Negotiate discounts, check policy limits, and purchase via official Razorpay Checkout</p>
+            </div>
+            <div class="chat-lang-picker">
+              <label for="chat-language-select" class="text-xs text-muted" style="margin-right: 0.3rem;">Language:</label>
+              <select id="chat-language-select" class="select-sm">
+                <option value="auto">🌐 Auto Detect</option>
+                <option value="en">🇺🇸 English</option>
+                <option value="hi">🇮🇳 Hindi (हिंदी)</option>
+                <option value="ta">🇮🇳 Tamil (தமிழ்)</option>
+                <option value="te">🇮🇳 Telugu (తెలుగు)</option>
+                <option value="es">🇪🇸 Spanish (Español)</option>
+              </select>
+            </div>
+          </div>
+          <div class="chat-messages" id="chat-messages">
+            <div class="chat-bubble assistant">
+              👋 Hello! Welcome to our enterprise store. I support English, Hindi (हिंदी), Tamil (தமிழ்), Telugu (తెలుగు), and Spanish (Español). Negotiate discounts within our policy limits and pay with genuine Razorpay Checkout. What are you looking for today?
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <input type="text" id="chat-input" placeholder="e.g. 'Can I get 10% off on AI Router?' or 'मुझे राउटर पर 10% छूट चाहिए'" />
+            <button class="btn btn-primary" id="chat-send-btn">Send</button>
+          </div>
+        </div>
+
+        <div class="panel tool-call-panel">
+          <h3>🔍 Behind-the-Scenes Tool Calls</h3>
+          <p class="subtitle">Real-time inspection of LLM function calling into <code>/api/negotiate</code> and <code>/api/checkout</code>.</p>
+          <div class="tool-feed" id="chat-tool-feed">
+            <div class="empty-state">No tool calls in this session yet. Type a message or click an ad to start.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: Autonomous AI Buyer Simulation -->
+    <section class="tab-content" id="sim-tab">
+      <div class="sim-grid">
+        <div class="panel">
+          <h2>🤖 Autonomous AI Buyer Personas</h2>
+          <p class="subtitle">Autonomous AI agents transacting directly via agent-readable API endpoints without human UI intervention.</p>
+          
+          <div class="persona-cards">
+            <!-- Persona 1 -->
+            <div class="persona-card">
+              <div class="persona-icon">🏷️</div>
+              <div class="persona-details">
+                <h4>Persona 1: The Bargain Hunter</h4>
+                <p>Asks for excessive 30% discount &rarr; receives explainable rejection &rarr; autonomously self-corrects to 15% SKU cap &rarr; completes checkout with cryptographic signature verification.</p>
+                <button class="btn btn-outline btn-sm" onclick="runSimulationPersona('bargain')">▶ Run Bargain Hunter</button>
+              </div>
+            </div>
+
+            <!-- Persona 2 -->
+            <div class="persona-card">
+              <div class="persona-icon">🐋</div>
+              <div class="persona-details">
+                <h4>Persona 2: The Whale Enterprise</h4>
+                <p>Orders GPU Dev Box (₹1.75L) &rarr; triggers <code>PENDING_APPROVAL</code> &rarr; merchant admin provides authenticated approval &rarr; order promoted to Razorpay.</p>
+                <button class="btn btn-outline btn-sm" onclick="runSimulationPersona('whale')">▶ Run Whale Enterprise</button>
+              </div>
+            </div>
+
+            <!-- Persona 3 -->
+            <div class="persona-card">
+              <div class="persona-icon">⚡</div>
+              <div class="persona-details">
+                <h4>Persona 3: The Impatient Retryer</h4>
+                <p>Concurrent duplicate checkouts with identical <code>idempotency_key</code> &rarr; handles race conditions gracefully with ZERO double charge.</p>
+                <button class="btn btn-outline btn-sm" onclick="runSimulationPersona('impatient')">▶ Run Impatient Retryer</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 1.5rem;">
+            <button class="btn btn-primary" onclick="runAllSimulations()">🚀 Run Full Multi-Persona Suite</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>💻 Live Agent Execution Console</h3>
+          <pre class="console-output" id="sim-console">Waiting for simulation trigger... Click any persona to execute.</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: Multilingual Ad Growth Engine -->
+    <section class="tab-content" id="ads-tab">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>📢 AI Multilingual Growth Ads</h2>
+            <p class="subtitle">AI-generated localized promotional campaigns driving human traffic into conversational checkout.</p>
+          </div>
+          <div class="sku-selector-group">
+            <label for="ad-sku-select">Select Product:</label>
+            <select id="ad-sku-select" class="select-md"></select>
+            <button class="btn btn-primary btn-sm" id="btn-generate-ads">✨ Generate Multilingual Ads</button>
+          </div>
+        </div>
+
+        <div class="ad-grid" id="ad-cards-container">
+          <div class="empty-state">Select a product above and click 'Generate Multilingual Ads' to view campaigns.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: ACP & AP2 Protocol Alignment -->
+    <section class="tab-content" id="acp-tab">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>🌐 Agentic Commerce Protocol (ACP) & AP2 Mandates</h2>
+            <p class="subtitle">Standards-aligned product discovery feed (<code>/acp/feed</code>), checkout session lifecycle, and cryptographic buyer mandates.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-acp-feed">🔄 Refresh Feed</button>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <h4>📦 Live ACP Product Discovery Feed (<code>GET /acp/feed</code>)</h4>
+          <pre id="acp-feed-display" class="console-output" style="max-height: 250px;">Loading ACP feed...</pre>
+        </div>
+
+        <div class="panel" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1);">
+          <h4>📜 Test AP2 Signed Buyer Mandate</h4>
+          <p class="text-sm text-muted">A buyer agent can attach a cryptographically signed mandate restricting discount cap, max quantity, and expiry before merchant policy evaluation.</p>
+          <div style="display:flex; gap: 0.5rem; margin-top: 0.5rem;">
+            <button class="btn btn-outline btn-sm" onclick="testValidMandate()">✅ Test Valid Buyer Mandate</button>
+            <button class="btn btn-danger btn-sm" onclick="testViolatedMandate()">❌ Test Mandate Quantity Violation (5 > 2)</button>
+          </div>
+          <pre id="mandate-test-output" class="console-output" style="margin-top: 0.8rem; max-height: 180px;">Click a mandate test button above.</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: Chaos & Money Lifecycle -->
+    <section class="tab-content" id="chaos-tab">
+      <div class="panel">
+        <h2>⚡ Chaos Lab & Complete Money Lifecycle</h2>
+        <p class="subtitle">
+          Test the full payment state machine: Delayed Webhook Recovery, Fallback Polling, Admin Approvals/Rejections, and Razorpay Refunds.
+        </p>
+
+        <div class="chaos-workflow-card">
+          <div class="step-badge">1. Create Test Order</div>
+          <div class="step-content">
+            <p>Create a test order to inject the failure into:</p>
+            <button class="btn btn-secondary btn-sm" id="btn-chaos-create-order">🛒 Create New Pending Order</button>
+            <span id="chaos-active-order" class="text-sm font-mono text-accent">No active order selected</span>
+          </div>
+        </div>
+
+        <div class="chaos-workflow-card">
+          <div class="step-badge">2. Inject Failure: Drop/Delay Webhook</div>
+          <div class="step-content">
+            <p>Simulate a dropped/delayed webhook notification from the gateway. Order transitions to <code>PENDING_CONFIRMATION</code>.</p>
+            <button class="btn btn-danger btn-sm" id="btn-chaos-delay-webhook" disabled>⚠️ Simulate Webhook Drop</button>
+          </div>
+        </div>
+
+        <div class="chaos-workflow-card">
+          <div class="step-badge">3. Execute Fallback Polling Recovery</div>
+          <div class="step-content">
+            <p>Trigger the fallback polling worker. Queries Razorpay Payments API directly to verify capture status and safely resolve the order.</p>
+            <button class="btn btn-success btn-sm" id="btn-chaos-poll-fallback" disabled>🔄 Run Fallback Polling (/api/orders/{id}/poll)</button>
+          </div>
+        </div>
+
+        <div class="chaos-workflow-card">
+          <div class="step-badge">4. Refund Completed Order</div>
+          <div class="step-content">
+            <p>Execute a refund against a paid order via the Razorpay Refunds API.</p>
+            <button class="btn btn-danger btn-sm" id="btn-chaos-refund-order" disabled>🔄 Execute Refund (/api/orders/{id}/refund)</button>
+          </div>
+        </div>
+
+        <div class="chaos-log-card">
+          <h4>🧪 Chaos & Refund Telemetry</h4>
+          <pre id="chaos-telemetry-output" class="console-output">Ready to execute failure and refund scenarios.</pre>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
