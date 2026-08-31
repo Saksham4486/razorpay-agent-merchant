@@ -3,8 +3,9 @@
 venv/
 ENV/
 env/
+ENV*/
 
-# Python Cache
+# Python Cache & Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
@@ -12,25 +13,40 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.nox/
+.mypy_cache/
 
-# Database & State
+# Databases & Runtime State
 *.db
 *.sqlite
 *.sqlite3
 merchant.db
+*.db-journal
+*.db-wal
 
-# Environment & Secrets
+# Secrets & Environment Configurations
 .env
-*.env.local
+.env.*
+!.env.example
+*.local
 
-# IDE & OS
+# IDEs, Editors & OS Files
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs & Diagnostics
 *.log
 logs/
+*.pid
+
+# Scratch & System Metadata
+.gemini/
+.antigravity/
+.system_generated/
+scratch/
