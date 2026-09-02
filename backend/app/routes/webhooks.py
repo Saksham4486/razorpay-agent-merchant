@@ -12,9 +12,6 @@ from backend.app.services.audit_service import record_audit_log
 logger = logging.getLogger("webhook_route")
 router = APIRouter(prefix="/api/webhooks", tags=["Webhooks"])
 
-# Also create an alias router for /api/webhook/razorpay
-webhook_alias_router = APIRouter(prefix="/api/webhook", tags=["Webhooks"])
-
 async def process_webhook_payload(
     request: Request,
     x_razorpay_signature: str,
@@ -162,14 +159,6 @@ async def process_webhook_payload(
 
 @router.post("/razorpay")
 async def handle_razorpay_webhook(
-    request: Request,
-    x_razorpay_signature: str = Header(None),
-    db: Session = Depends(get_db)
-):
-    return await process_webhook_payload(request, x_razorpay_signature, db)
-
-@webhook_alias_router.post("/razorpay")
-async def handle_razorpay_webhook_alias(
     request: Request,
     x_razorpay_signature: str = Header(None),
     db: Session = Depends(get_db)
