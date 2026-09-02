@@ -21,7 +21,8 @@ from backend.app.routes import (
     ads,
     chat,
     admin,
-    acp
+    acp,
+    agents
 )
 from backend.app.routes.orders import expire_order_if_due
 from backend.app.models import Order
@@ -124,6 +125,7 @@ app.include_router(ads.router)
 app.include_router(chat.router)
 app.include_router(admin.router)
 app.include_router(acp.router)
+app.include_router(agents.router)
 
 # Mount Static UI Files
 static_dir = os.path.join(os.path.dirname(__file__), "static")

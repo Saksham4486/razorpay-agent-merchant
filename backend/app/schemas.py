@@ -61,6 +61,10 @@ class NegotiateResponse(BaseModel):
     agent_trust_score: Optional[float] = None
     effective_approval_threshold_inr: float
     mandate_verified: Optional[bool] = None
+    issued_agent_key: Optional[str] = Field(
+        default=None,
+        description="Raw agent key, present only on the FIRST request for a brand-new agent_id. Store it; it cannot be retrieved again."
+    )
 
 # --- Checkout Schemas ---
 class CheckoutRequest(BaseModel):
@@ -92,6 +96,10 @@ class CheckoutResponse(BaseModel):
     expires_at: Optional[datetime.datetime] = None
     is_link_active: bool = True
     created_at: datetime.datetime
+    issued_agent_key: Optional[str] = Field(
+        default=None,
+        description="Raw agent key, present only on the FIRST request for a brand-new agent_id. Store it; it cannot be retrieved again."
+    )
 
 # --- Payment Verification Schema (Signature is strictly REQUIRED) ---
 class VerifyPaymentRequest(BaseModel):
@@ -254,3 +262,11 @@ class ChatResponse(BaseModel):
     tool_calls: List[ToolCallLog] = []
     active_order: Optional[CheckoutResponse] = None
     razorpay_key_id: Optional[str] = None
+
+# --- Agent Identity Schemas (A1) ---
+class AgentRegisterRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1, max_length=100, description="Unique identifier the agent wants to operate under")
+
+class AgentRegisterResponse(BaseModel):
+    agent_id: str
+    agent_key: str = Field(..., description="Raw secret key. Shown ONCE. Send it as the X-Agent-Key header on every subsequent request for this agent_id.")

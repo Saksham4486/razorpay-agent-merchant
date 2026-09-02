@@ -62,8 +62,9 @@ def create_checkout(
             return CheckoutResponse(**cached_data)
 
         # 3. Agent Authentication
+        issued_agent_key = None
         if req.agent_id:
-            verify_or_provision_agent_key(req.agent_id, x_agent_key, db)
+            issued_agent_key = verify_or_provision_agent_key(req.agent_id, x_agent_key, db)
 
         # 4. SKU Lookup
         item = db.query(CatalogItem).filter(CatalogItem.sku == req.sku).first()
@@ -95,7 +96,11 @@ def create_checkout(
             db.commit()
             raise HTTPException(
                 status_code=400,
-                detail={"error": "MandateViolation", "reason": mandate_reason}
+                detail={
+                    "error": "MandateViolation",
+                    "reason": mandate_reason,
+                    "issued_agent_key": issued_agent_key
+                }
             )
 
         # 6. Trust Score Lookup
@@ -142,7 +147,8 @@ def create_checkout(
                 detail={
                     "error": "PolicyViolation",
                     "reason": decision.reason,
-                    "max_allowable_discount": item.max_discount_pct
+                    "max_allowable_discount": item.max_discount_pct,
+                    "issued_agent_key": issued_agent_key
                 }
             )
 
@@ -240,5 +246,10 @@ def create_checkout(
                 cached_data["idempotent_replay"] = True
                 return CheckoutResponse(**cached_data)
             raise HTTPException(status_code=500, detail="Concurrent checkout idempotency race failure")
+
+        # Only the immediate caller ever sees the raw issued key; it is
+        # deliberately excluded from the persisted idempotency cache above
+        # so an idempotent replay never re-leaks a newly-minted secret.
+        response_obj.issued_agent_key = issued_agent_key
 
     return response_obj

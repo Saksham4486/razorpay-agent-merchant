@@ -35,8 +35,9 @@ def negotiate_price(
         check_rate_limit(request, req.agent_id)
 
     # 2. Agent Authentication
+    issued_agent_key = None
     if req.agent_id:
-        verify_or_provision_agent_key(req.agent_id, x_agent_key, db)
+        issued_agent_key = verify_or_provision_agent_key(req.agent_id, x_agent_key, db)
 
     # 3. Lookup SKU
     item = db.query(CatalogItem).filter(CatalogItem.sku == req.sku).first()
@@ -78,7 +79,8 @@ def negotiate_price(
             reason=mandate_reason,
             requires_approval=False,
             effective_approval_threshold_inr=item.requires_approval_above_inr,
-            mandate_verified=False
+            mandate_verified=False,
+            issued_agent_key=issued_agent_key
         )
 
     # 5. Fetch Agent Trust Score
@@ -133,5 +135,6 @@ def negotiate_price(
         requires_approval=(decision.status == PolicyStatus.PENDING_APPROVAL),
         agent_trust_score=trust_score,
         effective_approval_threshold_inr=decision.effective_approval_threshold,
-        mandate_verified=True if req.mandate else None
+        mandate_verified=True if req.mandate else None,
+        issued_agent_key=issued_agent_key
     )

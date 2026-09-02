@@ -39,26 +39,36 @@ def hash_agent_key(api_key: str) -> str:
         digestmod=hashlib.sha256
     ).hexdigest()
 
+def generate_agent_key() -> str:
+    """Generates a real, non-guessable agent secret. Never derived from agent_id."""
+    return secrets.token_urlsafe(32)
+
 def verify_or_provision_agent_key(
     agent_id: Optional[str],
     x_agent_key: Optional[str],
     db: Session
 ) -> Optional[str]:
     """
-    Agent Identity Scheme (Phase 3):
-    - When agent_id is provided, checks if agent exists and verifies X-Agent-Key.
-    - If agent is new, provisions a key and handles concurrent race conditions.
-    - Rejects identity spoofing with 401.
+    Agent Identity Scheme (A1 - hardened):
+    - Brand-new agent_id + no key supplied -> provision a real random secret,
+      store only its HMAC hash, and return the raw key ONCE so the caller
+      (e.g. the /api/agents/register route, or a first-touch negotiate/checkout
+      call) can hand it back to the agent. There is no guessable default key.
+    - Any agent_id that already has a stored key hash MUST present a matching
+      X-Agent-Key header, or the request is rejected with 401. No silent
+      fallback to a derived/default key.
+    - Returns the newly-generated raw key only on first provisioning; returns
+      None otherwise (key was already known to / verified against the caller).
     """
     if not agent_id:
         return None
 
-    key_str = x_agent_key if isinstance(x_agent_key, str) else None
+    key_str = x_agent_key if isinstance(x_agent_key, str) and x_agent_key.strip() else None
     trust_record = db.query(AgentTrustScore).filter(AgentTrustScore.agent_id == agent_id).first()
-    
+
     if not trust_record:
-        # First use: provision key with race handling
-        new_key = key_str or f"ak_{agent_id}"
+        # Brand-new agent: mint a real secret, persist only its hash.
+        new_key = generate_agent_key()
         trust_record = AgentTrustScore(
             agent_id=agent_id,
             trust_score=0.5,
@@ -69,22 +79,30 @@ def verify_or_provision_agent_key(
             db.flush()
             return new_key
         except IntegrityError:
+            # Lost a race with a concurrent first-use request; fall through
+            # to standard verification against whatever key won the race.
             db.rollback()
             trust_record = db.query(AgentTrustScore).filter(AgentTrustScore.agent_id == agent_id).first()
 
-    # Agent already exists: must verify X-Agent-Key if agent has key hash
+    # Existing agent: a stored key hash MUST be matched. No default fallback.
     if trust_record and trust_record.agent_key_hash:
-        expected_auto_key = f"ak_{agent_id}"
-        effective_key = key_str or expected_auto_key
-        provided_hash = hash_agent_key(effective_key)
-        
+        if not key_str:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=(
+                    f"Agent '{agent_id}' is already registered. "
+                    "Missing X-Agent-Key header. Use the key issued when you "
+                    "first registered (see POST /api/agents/register)."
+                )
+            )
+        provided_hash = hash_agent_key(key_str)
         if not secrets.compare_digest(trust_record.agent_key_hash, provided_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Authentication failed for agent '{agent_id}'. Invalid X-Agent-Key header."
             )
 
-    return key_str
+    return None
 
 def check_rate_limit(
     request: Request,

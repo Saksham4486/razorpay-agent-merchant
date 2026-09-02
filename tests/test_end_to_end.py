@@ -17,15 +17,33 @@ def test_full_agent_money_loop():
     catalog = cat_res.json()
     assert catalog["count"] > 0
     sku = "SKU-POS-TERMINAL"
+    agent_id = f"test_e2e_agent_{uuid.uuid4().hex[:8]}"
+
+    # 0. Explicit agent registration (A1) - real random key, shown once
+    reg_res = client.post("/api/agents/register", json={"agent_id": agent_id})
+    assert reg_res.status_code == 201
+    agent_key = reg_res.json()["agent_key"]
+    assert agent_key and len(agent_key) > 20
+    auth_headers = {"X-Agent-Key": agent_key}
+
+    # 0b. Reusing the agent_id with NO key must now be rejected (A1 regression guard)
+    spoof_res = client.post("/api/negotiate", json={
+        "sku": sku,
+        "requested_discount_pct": 10.0,
+        "quantity": 1,
+        "agent_id": agent_id,
+        "actor_type": "ai_agent"
+    })
+    assert spoof_res.status_code == 401
 
     # 2. Negotiate - Excessive discount rejected with explainable reason
     neg_bad = client.post("/api/negotiate", json={
         "sku": sku,
         "requested_discount_pct": 50.0,
         "quantity": 1,
-        "agent_id": "test_e2e_agent",
+        "agent_id": agent_id,
         "actor_type": "ai_agent"
-    })
+    }, headers=auth_headers)
     assert neg_bad.status_code == 200
     data_bad = neg_bad.json()
     assert data_bad["allowed"] is False
@@ -37,9 +55,9 @@ def test_full_agent_money_loop():
         "sku": sku,
         "requested_discount_pct": 15.0,
         "quantity": 1,
-        "agent_id": "test_e2e_agent",
+        "agent_id": agent_id,
         "actor_type": "ai_agent"
-    })
+    }, headers=auth_headers)
     assert neg_ok.status_code == 200
     data_ok = neg_ok.json()
     assert data_ok["allowed"] is True
@@ -53,9 +71,9 @@ def test_full_agent_money_loop():
         "quantity": 1,
         "requested_discount_pct": 15.0,
         "actor_type": "ai_agent",
-        "agent_id": "test_e2e_agent",
+        "agent_id": agent_id,
         "idempotency_key": idemp_key
-    })
+    }, headers=auth_headers)
     assert chk_res.status_code == 200
     chk_data = chk_res.json()
     assert chk_data["status"] == "pending_payment"
@@ -220,6 +238,11 @@ def test_ap2_buyer_mandates():
     )
     sig = sign_mandate(mandate)
 
+    # 0. Explicit agent registration (A1) before any negotiate/checkout traffic
+    reg_res = client.post("/api/agents/register", json={"agent_id": agent_id})
+    assert reg_res.status_code == 201
+    auth_headers = {"X-Agent-Key": reg_res.json()["agent_key"]}
+
     # 1. Valid mandate within bounds -> MUST PASS
     pass_res = client.post("/api/negotiate", json={
         "sku": sku,
@@ -229,7 +252,7 @@ def test_ap2_buyer_mandates():
         "actor_type": "ai_agent",
         "mandate": mandate.model_dump(mode="json"),
         "mandate_signature": sig
-    })
+    }, headers=auth_headers)
     assert pass_res.status_code == 200
     assert pass_res.json()["allowed"] is True
     assert pass_res.json()["mandate_verified"] is True
@@ -243,7 +266,7 @@ def test_ap2_buyer_mandates():
         "actor_type": "ai_agent",
         "mandate": mandate.model_dump(mode="json"),
         "mandate_signature": sig
-    })
+    }, headers=auth_headers)
     assert fail_res.status_code == 200
     assert fail_res.json()["allowed"] is False
     assert "exceeds buyer authorized mandate limit" in fail_res.json()["reason"]
