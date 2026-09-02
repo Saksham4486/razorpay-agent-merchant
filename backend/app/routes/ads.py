@@ -4,6 +4,7 @@ from backend.app.database import get_db
 from backend.app.models import CatalogItem
 from backend.app.schemas import AdGenerateRequest, AdGenerateResponse, MultilingualAdItem
 from backend.app.services.llm_service import llm_service
+from backend.app.services.audit_service import record_audit_log
 
 router = APIRouter(prefix="/api/ads", tags=["AI Multilingual Ads"])
 
@@ -22,6 +23,21 @@ def generate_ads(req: AdGenerateRequest, db: Session = Depends(get_db)):
         languages=req.languages,
         target_audience=req.target_audience
     )
+
+    gemini_count = sum(1 for a in ad_results if a.get("generated_by") == "gemini")
+    record_audit_log(
+        db=db,
+        actor="growth_engine",
+        sku=item.sku,
+        requested_discount=0.0,
+        order_value_inr=0.0,
+        policy_decision="approved",
+        reason=f"📢 Generated {len(ad_results)} multilingual ad(s) for {item.name} "
+               f"({gemini_count} via Gemini, {len(ad_results) - gemini_count} via template fallback).",
+        status="ad_generated",
+        metadata={"languages": [a["language_code"] for a in ad_results], "gemini_count": gemini_count}
+    )
+    db.commit()
 
     return AdGenerateResponse(
         sku=item.sku,

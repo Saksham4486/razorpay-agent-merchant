@@ -94,28 +94,93 @@ class LLMService:
         languages: Optional[List[str]] = None,
         target_audience: Optional[str] = "Tech enthusiasts & enterprise buyers"
     ) -> List[Dict[str, Any]]:
+        """
+        Generates real, LLM-authored multilingual ad copy per language via
+        Gemini (Section C) - same google-genai pattern as
+        parse_chat_intent_with_llm(). Falls back to the static AD_TEMPLATES
+        only when no GEMINI_API_KEY is configured, or if a given language's
+        LLM call fails, so the endpoint always returns a complete result.
+        """
         selected_langs = languages or ["en", "hi", "ta", "te", "es"]
         ads = []
-        
+
         for lang in selected_langs:
-            template = AD_TEMPLATES.get(lang, AD_TEMPLATES["en"])
-            headline = template["headline"].format(name=item.name, price=item.price_inr, stock=item.stock)
-            body = template["body"].format(name=item.name, price=item.price_inr, stock=item.stock)
-            cta = template["cta"]
-            chat_link = f"/#chat?sku={item.sku}&lang={lang}"
-            
-            ads.append({
-                "language_code": lang,
-                "language_name": template["name"],
-                "headline": headline,
-                "body_text": body,
-                "call_to_action": cta,
-                "hashtags": template["hashtags"],
-                "discount_hook": template["hook"],
-                "chat_deep_link": chat_link
-            })
-            
+            ad = None
+            if self.gemini_key:
+                ad = self._generate_ad_via_gemini(item, lang, target_audience)
+            if ad is None:
+                ad = self._generate_ad_from_template(item, lang)
+            ads.append(ad)
+
         return ads
+
+    def _generate_ad_from_template(self, item: CatalogItem, lang: str) -> Dict[str, Any]:
+        template = AD_TEMPLATES.get(lang, AD_TEMPLATES["en"])
+        headline = template["headline"].format(name=item.name, price=item.price_inr, stock=item.stock)
+        body = template["body"].format(name=item.name, price=item.price_inr, stock=item.stock)
+        return {
+            "language_code": lang,
+            "language_name": template["name"],
+            "headline": headline,
+            "body_text": body,
+            "call_to_action": template["cta"],
+            "hashtags": template["hashtags"],
+            "discount_hook": template["hook"],
+            "chat_deep_link": f"/#chat?sku={item.sku}&lang={lang}",
+            "generated_by": "template_fallback"
+        }
+
+    def _generate_ad_via_gemini(
+        self,
+        item: CatalogItem,
+        lang: str,
+        target_audience: Optional[str]
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=self.gemini_key)
+            lang_names = {"en": "English", "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "es": "Spanish"}
+            lang_name = lang_names.get(lang, lang)
+
+            prompt = (
+                f"Write short, punchy advertising copy in {lang_name} for this product, "
+                f"targeting: {target_audience}.\n"
+                f"Product: {item.name}\n"
+                f"Description: {item.description}\n"
+                f"Price: INR {item.price_inr:,.2f}\n"
+                f"Stock remaining: {item.stock} units\n"
+                f"Respond as valid JSON with EXACTLY these keys:\n"
+                f'{{"headline": "<short punchy headline, may include an emoji>", '
+                f'"body_text": "<1-2 sentence ad body mentioning the price>", '
+                f'"call_to_action": "<short CTA button text>", '
+                f'"hashtags": ["<3 short hashtags relevant to this product, no # needed>"], '
+                f'"discount_hook": "<one short line teasing a negotiable/instant discount>"}}\n'
+                f"All text values must be written in {lang_name}, not English (except for 'en')."
+            )
+
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
+            parsed = json.loads(response.text)
+
+            return {
+                "language_code": lang,
+                "language_name": lang_name,
+                "headline": parsed["headline"],
+                "body_text": parsed["body_text"],
+                "call_to_action": parsed["call_to_action"],
+                "hashtags": parsed.get("hashtags", []),
+                "discount_hook": parsed.get("discount_hook", ""),
+                "chat_deep_link": f"/#chat?sku={item.sku}&lang={lang}",
+                "generated_by": "gemini"
+            }
+        except Exception as e:
+            logger.warning(f"Gemini ad generation failed for lang={lang}: {e}. Falling back to template.")
+            return None
 
     def parse_chat_intent_with_llm(
         self,

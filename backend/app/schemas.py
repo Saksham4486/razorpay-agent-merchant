@@ -234,6 +234,7 @@ class MultilingualAdItem(BaseModel):
     hashtags: List[str]
     discount_hook: str
     chat_deep_link: str
+    generated_by: str = Field(default="template_fallback", description="'gemini' or 'template_fallback'")
 
 class AdGenerateResponse(BaseModel):
     sku: str
