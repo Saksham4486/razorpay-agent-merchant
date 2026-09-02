@@ -10,6 +10,7 @@ from backend.app.schemas import (
 from backend.app.routes.negotiate import negotiate_price
 from backend.app.routes.checkout import create_checkout
 from backend.app.services.llm_service import llm_service
+from backend.app.services.upsell_service import evaluate_upsell_offer
 from backend.app.config import settings
 
 router = APIRouter(prefix="/api/chat", tags=["Conversational Checkout"])
@@ -58,6 +59,7 @@ def handle_chat_message(req: ChatRequest, db: Session = Depends(get_db)):
 
     tool_logs = []
     active_order = None
+    upsell_offer = None
     reply_text = ""
 
     # If general catalog request or no SKU matched yet
@@ -118,11 +120,25 @@ def handle_chat_message(req: ChatRequest, db: Session = Depends(get_db)):
                 "reason": neg_res.reason
             }
         )
+
+        upsell_offer = None
+        if neg_res.allowed:
+            upsell_offer = evaluate_upsell_offer(
+                triggering_sku=item.sku, db=db, agent_id=None, actor="chat_human"
+            )
+            if upsell_offer:
+                reply_text += (
+                    f"\n\n💡 **You might also like:** {upsell_offer['name']} "
+                    f"(`{upsell_offer['sku']}`) - ₹{upsell_offer['final_unit_price_inr']:,.2f} "
+                    f"({upsell_offer['offered_discount_pct']}% off). Want to add it?"
+                )
+
         return ChatResponse(
             reply=reply_text,
             language=detected_lang,
             tool_calls=tool_logs,
-            razorpay_key_id=settings.RAZORPAY_KEY_ID
+            razorpay_key_id=settings.RAZORPAY_KEY_ID,
+            upsell_offer=upsell_offer
         )
 
     # 4. Checkout Intent
@@ -155,7 +171,13 @@ def handle_chat_message(req: ChatRequest, db: Session = Depends(get_db)):
                 result=order_res.model_dump()
             ))
             active_order = order_res
-            
+
+            upsell_offer = None
+            if order_res.status in ("paid", "pending_payment"):
+                upsell_offer = evaluate_upsell_offer(
+                    triggering_sku=item.sku, db=db, agent_id=None, actor="chat_human"
+                )
+
             if order_res.status == "pending_approval":
                 reply_text = llm_service.format_multilingual_response(
                     lang=detected_lang,
@@ -182,6 +204,12 @@ def handle_chat_message(req: ChatRequest, db: Session = Depends(get_db)):
                         "status": order_res.status
                     }
                 )
+                if upsell_offer:
+                    reply_text += (
+                        f"\n\n💡 **Complete your setup:** {upsell_offer['name']} "
+                        f"(`{upsell_offer['sku']}`) - ₹{upsell_offer['final_unit_price_inr']:,.2f} "
+                        f"({upsell_offer['offered_discount_pct']}% off). Want to add it to a new order?"
+                    )
         except HTTPException as e:
             reply_text = f"Checkout failed: {e.detail}"
 
@@ -190,7 +218,8 @@ def handle_chat_message(req: ChatRequest, db: Session = Depends(get_db)):
             language=detected_lang,
             tool_calls=tool_logs,
             active_order=active_order,
-            razorpay_key_id=settings.RAZORPAY_KEY_ID
+            razorpay_key_id=settings.RAZORPAY_KEY_ID,
+            upsell_offer=upsell_offer
         )
 
     # 5. Info Response

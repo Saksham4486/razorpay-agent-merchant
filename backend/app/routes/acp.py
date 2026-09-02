@@ -12,6 +12,7 @@ from backend.app.schemas import (
 )
 from backend.app.routes.checkout import create_checkout
 from backend.app.policy_engine import check_policy, PolicyStatus
+from backend.app.services.upsell_service import evaluate_upsell_offer
 from backend.app.config import settings
 
 router = APIRouter(prefix="/acp", tags=["Agentic Commerce Protocol (ACP)"])
@@ -192,6 +193,15 @@ def complete_acp_checkout_session(
     session["status"] = "completed"
     session["razorpay_order_id"] = chk_res.razorpay_order_id
 
+    upsell_offer = None
+    if chk_res.status in ("paid", "pending_payment"):
+        upsell_offer = evaluate_upsell_offer(
+            triggering_sku=session["sku"],
+            db=db,
+            agent_id=session["agent_id"],
+            actor=f"ai_agent:{session['agent_id']}" if session["agent_id"] else "ai_agent"
+        )
+
     return AcpCheckoutSessionResponse(
         session_id=session_id,
         status="completed",
@@ -203,7 +213,8 @@ def complete_acp_checkout_session(
         policy_reason=chk_res.policy_reason,
         razorpay_order_id=chk_res.razorpay_order_id,
         razorpay_key_id=chk_res.razorpay_key_id,
-        expires_at=chk_res.expires_at or session["expires_at"]
+        expires_at=chk_res.expires_at or session["expires_at"],
+        upsell_offer=upsell_offer
     )
 
 @router.post("/checkout_sessions/{session_id}/cancel")

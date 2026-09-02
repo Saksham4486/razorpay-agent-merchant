@@ -218,6 +218,7 @@ class AcpCheckoutSessionResponse(BaseModel):
     razorpay_order_id: Optional[str] = None
     razorpay_key_id: Optional[str] = None
     expires_at: datetime.datetime
+    upsell_offer: Optional[Dict[str, Any]] = None
 
 # --- Multilingual Ad Generation Schemas ---
 class AdGenerateRequest(BaseModel):
@@ -263,6 +264,7 @@ class ChatResponse(BaseModel):
     tool_calls: List[ToolCallLog] = []
     active_order: Optional[CheckoutResponse] = None
     razorpay_key_id: Optional[str] = None
+    upsell_offer: Optional[Dict[str, Any]] = None
 
 # --- Agent Identity Schemas (A1) ---
 class AgentRegisterRequest(BaseModel):
