@@ -277,56 +277,85 @@ function startCountdownTimer(orderRef, expiresAtStr, timerElId, btnElId, cardElI
 
 // --- Official Real Razorpay Checkout.js Integration (Phase 1) ---
 function launchRealRazorpayCheckout(order, keyId) {
+  if (!isLiveRazorpay) {
+    // Mock mode: never attempt to open the real Razorpay iframe with a
+    // fabricated order_test_... id / mock key - that errors in the browser.
+    // Instead, run an honest server-verified simulated payment (A2).
+    simulateMockPayment(order);
+    return;
+  }
+
   const effectiveKey = keyId || "rzp_test_mock_merchant_key";
   const amountPaise = Math.round(order.total_amount_inr * 100);
 
-  // If Razorpay JS library is loaded and not a pure mock key, open official Razorpay Checkout iframe
-  if (typeof Razorpay !== 'undefined') {
-    const options = {
-      key: effectiveKey,
-      amount: amountPaise,
-      currency: "INR",
-      name: "Razorpay Autonomous Merchant",
-      description: `Order ${order.order_reference}`,
-      image: "https://cdn.razorpay.com/static/assets/logo/rzp.png",
-      order_id: order.razorpay_order_id,
-      handler: async function (response) {
-        await submitPaymentVerification(order.order_reference, response.razorpay_payment_id, response.razorpay_order_id, response.razorpay_signature, order.total_amount_inr);
-      },
-      modal: {
-        ondismiss: function () {
-          console.log("Razorpay checkout modal dismissed by user. Order remains pending_payment.");
-        }
-      },
-      theme: { color: "#3b82f6" }
-    };
+  const options = {
+    key: effectiveKey,
+    amount: amountPaise,
+    currency: "INR",
+    name: "Razorpay Autonomous Merchant",
+    description: `Order ${order.order_reference}`,
+    image: "https://cdn.razorpay.com/static/assets/logo/rzp.png",
+    order_id: order.razorpay_order_id,
+    handler: async function (response) {
+      await submitPaymentVerification(order.order_reference, response.razorpay_payment_id, response.razorpay_order_id, response.razorpay_signature, order.total_amount_inr);
+    },
+    modal: {
+      ondismiss: function () {
+        console.log("Razorpay checkout modal dismissed by user. Order remains pending_payment.");
+      }
+    },
+    theme: { color: "#3b82f6" }
+  };
 
-    try {
-      const rzp = new Razorpay(options);
-      rzp.on('payment.failed', function (response) {
-        alert(`Payment failed: ${response.error.description} (Code: ${response.error.code})`);
-      });
-      rzp.open();
+  const rzp = new Razorpay(options);
+  rzp.on('payment.failed', function (response) {
+    alert(`Payment failed: ${response.error.description} (Code: ${response.error.code})`);
+  });
+  rzp.open();
+}
+
+// Mock-mode payment simulation: calls the honestly-labeled backend endpoint
+// which generates a real HMAC SHA-256 signature server-side and verifies it
+// through the exact same path a real payment takes. No client-side fakes.
+async function simulateMockPayment(order) {
+  const confirmPay = confirm(`[Mock Sandbox]\n\nSimulate payment of ₹${order.total_amount_inr.toLocaleString('en-IN', {minimumFractionDigits: 2})} for Order ${order.order_reference}?\n\n(Server will generate and verify a genuine HMAC SHA-256 test signature - no real Razorpay charge occurs.)`);
+  if (!confirmPay) return;
+
+  try {
+    const res = await fetch(`/api/orders/${order.order_reference}/simulate-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(`Simulation error: ${data.detail ? (data.detail.message || JSON.stringify(data.detail)) : 'Simulation failed'}`);
       return;
-    } catch (err) {
-      console.warn("Razorpay iframe open note:", err);
     }
-  }
 
-  // Safe Test Sandbox Prompt if opening in simulated mock mode without live test credentials
-  const simPaymentId = 'pay_test_' + Math.random().toString(36).substring(2, 10);
-  const simSig = generateClientSignature(order.razorpay_order_id, simPaymentId);
-
-  const confirmPay = confirm(`[Razorpay Test Mode Sandbox]\n\nPay ₹${order.total_amount_inr.toLocaleString('en-IN', {minimumFractionDigits: 2})} for Order ${order.order_reference}?\n\n(Click OK to verify with cryptographic HMAC SHA-256 signature)`);
-  if (confirmPay) {
-    submitPaymentVerification(order.order_reference, simPaymentId, order.razorpay_order_id, simSig, order.total_amount_inr);
+    finalizePaidOrderUI(order.order_reference, data.razorpay_payment_id, order.total_amount_inr);
+  } catch (err) {
+    alert(`Payment simulation failed: ${err.message}`);
   }
 }
 
-// Client-side test signature calculation for mock testing
-function generateClientSignature(orderId, paymentId) {
-  // In mock sandbox, client calculates sha256 or sends for backend verification
-  return "sig_verified_" + Math.random().toString(36).substring(2, 14);
+function finalizePaidOrderUI(orderRef, paymentId, amount) {
+  if (activeTimers[orderRef]) clearInterval(activeTimers[orderRef]);
+
+  const timerEl = document.getElementById(`timer-${orderRef}`);
+  const btnEl = document.getElementById(`pay-btn-${orderRef}`);
+  if (timerEl) {
+    timerEl.textContent = '🔒 Payment Deactivated (Fulfilled)';
+    timerEl.className = 'tag-status status-paid font-mono';
+  }
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = '✅ Payment Fulfilled & Verified';
+    btnEl.style.background = '#10b981';
+  }
+
+  appendChatMessage('assistant', `✅ Payment of **₹${amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}** verified via cryptographic HMAC SHA-256!\n\n• **Payment ID**: \`${paymentId}\`\n• **Order Ref**: \`${orderRef}\`\n• **Status**: \`PAID\`\n• 🔒 **Single-Use Link Deactivated**`);
+  loadAuditTrail();
 }
 
 async function submitPaymentVerification(orderRef, paymentId, orderId, signature, amount) {
@@ -348,22 +377,7 @@ async function submitPaymentVerification(orderRef, paymentId, orderId, signature
       return;
     }
 
-    if (activeTimers[orderRef]) clearInterval(activeTimers[orderRef]);
-
-    const timerEl = document.getElementById(`timer-${orderRef}`);
-    const btnEl = document.getElementById(`pay-btn-${orderRef}`);
-    if (timerEl) {
-      timerEl.textContent = '🔒 Payment Deactivated (Fulfilled)';
-      timerEl.className = 'tag-status status-paid font-mono';
-    }
-    if (btnEl) {
-      btnEl.disabled = true;
-      btnEl.textContent = '✅ Payment Fulfilled & Verified';
-      btnEl.style.background = '#10b981';
-    }
-
-    appendChatMessage('assistant', `✅ Payment of **₹${amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}** verified via cryptographic HMAC SHA-256!\n\n• **Payment ID**: \`${paymentId}\`\n• **Order Ref**: \`${orderRef}\`\n• **Status**: \`PAID\`\n• 🔒 **Single-Use Link Deactivated**`);
-    loadAuditTrail();
+    finalizePaidOrderUI(orderRef, paymentId, amount);
   } catch (err) {
     alert(`Payment verification failed: ${err.message}`);
   }
@@ -484,8 +498,10 @@ window.testValidMandate = async function() {
   out.textContent = "Testing AP2 Signed Mandate (Quantity=1, Cap=15%)...\n";
 
   try {
+    const agentId = "agent_ap2_corp";
+    const authHeaders = await getAgentAuthHeaders(agentId);
     const mandate = {
-      agent_id: "agent_ap2_corp",
+      agent_id: agentId,
       sku: "SKU-AI-ROUTER-PRO",
       max_unit_price: 45000.0,
       max_discount_pct: 15.0,
@@ -496,12 +512,12 @@ window.testValidMandate = async function() {
 
     const res = await fetch('/api/negotiate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         sku: "SKU-AI-ROUTER-PRO",
         requested_discount_pct: 10.0,
         quantity: 1,
-        agent_id: "agent_ap2_corp",
+        agent_id: agentId,
         actor_type: "ai_agent",
         mandate: mandate,
         mandate_signature: "mock_mandate_sig_valid"
@@ -520,8 +536,10 @@ window.testViolatedMandate = async function() {
   out.textContent = "Testing Mandate Quantity Violation (Buyer asks for 5 units, Mandate max is 2)...\n";
 
   try {
+    const agentId = "agent_ap2_corp";
+    const authHeaders = await getAgentAuthHeaders(agentId);
     const mandate = {
-      agent_id: "agent_ap2_corp",
+      agent_id: agentId,
       sku: "SKU-AI-ROUTER-PRO",
       max_unit_price: 45000.0,
       max_discount_pct: 15.0,
@@ -532,12 +550,12 @@ window.testViolatedMandate = async function() {
 
     const res = await fetch('/api/negotiate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         sku: "SKU-AI-ROUTER-PRO",
         requested_discount_pct: 10.0,
         quantity: 5,
-        agent_id: "agent_ap2_corp",
+        agent_id: agentId,
         actor_type: "ai_agent",
         mandate: mandate,
         mandate_signature: "mock_mandate_sig_valid"
@@ -551,6 +569,37 @@ window.testViolatedMandate = async function() {
   }
 };
 
+// --- Agent Key Management (A1) ---
+// Demo/simulation buttons impersonate fixed agent_ids across multiple calls.
+// Register once per browser (persisted in localStorage) and attach the
+// issued X-Agent-Key on every subsequent call for that agent_id, exactly
+// like a real autonomous agent is expected to.
+async function getAgentAuthHeaders(agentId) {
+  const storageKey = `agent_key:${agentId}`;
+  let key = localStorage.getItem(storageKey);
+  if (!key) {
+    try {
+      const res = await fetch('/api/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agentId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        key = data.agent_key;
+        localStorage.setItem(storageKey, key);
+      } else if (res.status === 409) {
+        // Already registered in a previous session whose key we lost (e.g.
+        // cleared storage). Nothing we can do but surface it clearly.
+        console.warn(`Agent '${agentId}' already registered server-side but no local key found.`);
+      }
+    } catch (err) {
+      console.warn(`Agent registration failed for ${agentId}:`, err);
+    }
+  }
+  return key ? { 'Content-Type': 'application/json', 'X-Agent-Key': key } : { 'Content-Type': 'application/json' };
+}
+
 // --- AI Buyer Simulation Trigger ---
 window.runSimulationPersona = async function(persona) {
   const consoleEl = document.getElementById('sim-console');
@@ -558,6 +607,8 @@ window.runSimulationPersona = async function(persona) {
 
   try {
     if (persona === 'bargain') {
+      const agentId = 'agent_bargain_hunter';
+      const authHeaders = await getAgentAuthHeaders(agentId);
       appendLog(consoleEl, "1. Fetching Catalog for SKU-AI-ROUTER-PRO (₹45,000)...");
       const catRes = await fetch('/api/catalog');
       const cat = await catRes.json();
@@ -565,8 +616,8 @@ window.runSimulationPersona = async function(persona) {
       appendLog(consoleEl, "2. Requesting 30% discount (Exceeds SKU limit of 15%)...");
       const neg1 = await (await fetch('/api/negotiate', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sku: 'SKU-AI-ROUTER-PRO', requested_discount_pct: 30.0, quantity: 1, agent_id: 'agent_bargain_hunter', actor_type: 'ai_agent' })
+        headers: authHeaders,
+        body: JSON.stringify({ sku: 'SKU-AI-ROUTER-PRO', requested_discount_pct: 30.0, quantity: 1, agent_id: agentId, actor_type: 'ai_agent' })
       })).json();
       
       appendLog(consoleEl, `❌ Rejection Received: "${neg1.reason}"`);
@@ -574,8 +625,8 @@ window.runSimulationPersona = async function(persona) {
       
       const neg2 = await (await fetch('/api/negotiate', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sku: 'SKU-AI-ROUTER-PRO', requested_discount_pct: 15.0, quantity: 1, agent_id: 'agent_bargain_hunter', actor_type: 'ai_agent' })
+        headers: authHeaders,
+        body: JSON.stringify({ sku: 'SKU-AI-ROUTER-PRO', requested_discount_pct: 15.0, quantity: 1, agent_id: agentId, actor_type: 'ai_agent' })
       })).json();
       appendLog(consoleEl, `✅ Approval Received: Unit Price: ₹${neg2.final_unit_price_inr.toLocaleString('en-IN')}`);
 
@@ -583,20 +634,22 @@ window.runSimulationPersona = async function(persona) {
       const idempKey = 'idemp_ui_' + Math.random().toString(36).substring(2, 10);
       const chk = await (await fetch('/api/checkout', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sku: 'SKU-AI-ROUTER-PRO', quantity: 1, requested_discount_pct: 15.0, actor_type: 'ai_agent', agent_id: 'agent_bargain_hunter', idempotency_key: idempKey })
+        headers: authHeaders,
+        body: JSON.stringify({ sku: 'SKU-AI-ROUTER-PRO', quantity: 1, requested_discount_pct: 15.0, actor_type: 'ai_agent', agent_id: agentId, idempotency_key: idempKey })
       })).json();
       appendLog(consoleEl, `🎉 Razorpay Order Created: ${chk.razorpay_order_id} (Ref: ${chk.order_reference})`);
 
       appendLog(consoleEl, "5. Webhook signature verified -> Order marked PAID & Hash Chain updated.");
       loadAuditTrail();
     } else if (persona === 'whale') {
+      const agentId = 'agent_enterprise_whale';
+      const authHeaders = await getAgentAuthHeaders(agentId);
       appendLog(consoleEl, "1. Placing High-Value Enterprise Order (1x GPU Dev Box @ ₹1,85,000 = ₹1,75,750)...");
       const idempKey = 'idemp_whale_' + Math.random().toString(36).substring(2, 10);
       const chk = await (await fetch('/api/checkout', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sku: 'SKU-GPU-DEV-BOX', quantity: 1, requested_discount_pct: 5.0, actor_type: 'ai_agent', agent_id: 'agent_enterprise_whale', idempotency_key: idempKey })
+        headers: authHeaders,
+        body: JSON.stringify({ sku: 'SKU-GPU-DEV-BOX', quantity: 1, requested_discount_pct: 5.0, actor_type: 'ai_agent', agent_id: agentId, idempotency_key: idempKey })
       })).json();
 
       appendLog(consoleEl, `⚠️ Policy Gating Triggered: Status = ${chk.status}`);
@@ -609,20 +662,22 @@ window.runSimulationPersona = async function(persona) {
       })).json();
       appendLog(consoleEl, `✅ Admin Approved! Razorpay Order ID: ${adminRes.razorpay_order_id}`);
     } else if (persona === 'impatient') {
+      const agentId = 'agent_impatient_fast';
+      const authHeaders = await getAgentAuthHeaders(agentId);
       const fixedKey = 'idemp_double_tap_' + Math.random().toString(36).substring(2, 8);
       appendLog(consoleEl, `1. Sending first checkout with idempotency_key: ${fixedKey}...`);
       const r1 = await (await fetch('/api/checkout', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sku: 'SKU-CLOUD-CREDITS', quantity: 2, requested_discount_pct: 10.0, actor_type: 'ai_agent', agent_id: 'agent_impatient_fast', idempotency_key: fixedKey })
+        headers: authHeaders,
+        body: JSON.stringify({ sku: 'SKU-CLOUD-CREDITS', quantity: 2, requested_discount_pct: 10.0, actor_type: 'ai_agent', agent_id: agentId, idempotency_key: fixedKey })
       })).json();
       appendLog(consoleEl, `Order 1 Ref: ${r1.order_reference} (Replay: ${r1.idempotent_replay})`);
 
       appendLog(consoleEl, "2. ⚡ Sending duplicate checkout concurrently...");
       const r2 = await (await fetch('/api/checkout', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sku: 'SKU-CLOUD-CREDITS', quantity: 2, requested_discount_pct: 10.0, actor_type: 'ai_agent', agent_id: 'agent_impatient_fast', idempotency_key: fixedKey })
+        headers: authHeaders,
+        body: JSON.stringify({ sku: 'SKU-CLOUD-CREDITS', quantity: 2, requested_discount_pct: 10.0, actor_type: 'ai_agent', agent_id: agentId, idempotency_key: fixedKey })
       })).json();
       appendLog(consoleEl, `Order 2 Ref: ${r2.order_reference} (Replay: ${r2.idempotent_replay})`);
       appendLog(consoleEl, `🛡️ ZERO Double-Charge Guarantee: Orders are identical (${r1.order_reference} == ${r2.order_reference})`);

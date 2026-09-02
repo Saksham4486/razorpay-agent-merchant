@@ -1,4 +1,5 @@
 import json
+import uuid
 import logging
 import datetime
 from fastapi import APIRouter, Depends, HTTPException
@@ -207,6 +208,62 @@ def verify_client_payment(
         "is_link_active": False,
         "message": "Payment verified successfully via HMAC SHA256! Link has been deactivated."
     }
+
+@router.post("/{order_ref}/simulate-payment")
+def simulate_payment(order_ref: str, db: Session = Depends(get_db)):
+    """
+    Honest mock-mode payment simulator (A2).
+
+    Only usable when the server is running against mock/test credentials
+    (payment_service.is_mock). It never fabricates a client-side signature
+    the way the old generateClientSignature() JS helper did. Instead it:
+      1. Server-side generates a plausible test payment_id.
+      2. Server-side computes a GENUINE HMAC SHA-256 signature via
+         payment_service.generate_test_payment_signature(), using the same
+         key_secret and formula a real Razorpay webhook/checkout would use.
+      3. Runs that payment through the exact same verify_client_payment()
+         path a real payment takes (link-active check, TTL check, signature
+         verification, audit logging) - "paid" is reached through a real
+         signature check, not client-side theater.
+    """
+    if not payment_service.is_mock:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "SimulationNotAllowed",
+                "message": "Payment simulation is only available when the server is running in mock mode "
+                            "(mock Razorpay credentials). This deployment is using live test-mode credentials; "
+                            "use the real Razorpay Checkout.js widget instead."
+            }
+        )
+
+    order = db.query(Order).filter(
+        (Order.order_reference == order_ref) | (Order.razorpay_order_id == order_ref)
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    rzp_order_id = order.razorpay_order_id or f"order_test_{uuid.uuid4().hex[:14]}"
+    simulated_payment_id = f"pay_sim_{uuid.uuid4().hex[:10]}"
+    genuine_signature = payment_service.generate_test_payment_signature(
+        razorpay_order_id=rzp_order_id,
+        razorpay_payment_id=simulated_payment_id
+    )
+
+    verify_req = VerifyPaymentRequest(
+        razorpay_payment_id=simulated_payment_id,
+        razorpay_order_id=rzp_order_id,
+        razorpay_signature=genuine_signature
+    )
+
+    # Re-use the exact same verification path a real payment takes.
+    result = verify_client_payment(order_ref=order_ref, req=verify_req, db=db)
+    result["simulated"] = True
+    result["message"] = (
+        "Mock-mode payment simulated: a genuine HMAC SHA-256 signature was generated "
+        "server-side and verified through the real verification path (no client-side fake)."
+    )
+    return result
 
 @router.post("/{order_ref}/refund", response_model=RefundResponse)
 def refund_order(
