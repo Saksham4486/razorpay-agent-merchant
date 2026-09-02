@@ -270,3 +270,15 @@ class AgentRegisterRequest(BaseModel):
 class AgentRegisterResponse(BaseModel):
     agent_id: str
     agent_key: str = Field(..., description="Raw secret key. Shown ONCE. Send it as the X-Agent-Key header on every subsequent request for this agent_id.")
+
+# --- AP2 Mandate Issuance Schema (A4) ---
+class MandateIssueRequest(BaseModel):
+    sku: str
+    max_unit_price: float = Field(..., gt=0)
+    max_discount_pct: float = Field(..., ge=0.0, le=100.0)
+    max_quantity: int = Field(..., ge=1)
+    valid_minutes: int = Field(default=60, ge=1, le=1440, description="Mandate validity window in minutes")
+
+class MandateIssueResponse(BaseModel):
+    mandate: BuyerMandate
+    mandate_signature: str

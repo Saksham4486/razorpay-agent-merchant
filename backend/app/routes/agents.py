@@ -1,11 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from typing import Optional
+import datetime
+import secrets
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from backend.app.database import get_db
 from backend.app.models import AgentTrustScore
-from backend.app.schemas import AgentRegisterRequest, AgentRegisterResponse
+from backend.app.schemas import (
+    AgentRegisterRequest, AgentRegisterResponse,
+    MandateIssueRequest, MandateIssueResponse, BuyerMandate
+)
 from backend.app.middleware.auth import generate_agent_key, hash_agent_key
+from backend.app.services.mandate_service import sign_mandate
 
 router = APIRouter(prefix="/api/agents", tags=["Agent Identity"])
 
@@ -55,3 +62,60 @@ def register_agent(req: AgentRegisterRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Registration race; try again.")
 
     return AgentRegisterResponse(agent_id=req.agent_id, agent_key=new_key)
+
+
+@router.post("/{agent_id}/mandates", response_model=MandateIssueResponse)
+def issue_mandate(
+    agent_id: str,
+    req: MandateIssueRequest,
+    x_agent_key: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    AP2 Mandate Issuance (A4).
+
+    Requires the agent's real, already-issued X-Agent-Key (from
+    POST /api/agents/register). Signs and returns a BuyerMandate the
+    agent can attach as `mandate` / `mandate_signature` on
+    /api/negotiate or /api/checkout - using the exact same
+    sign_mandate()/evaluate_buyer_mandate() logic pytest already
+    exercises internally, now reachable by a real agent over HTTP.
+
+    Unlike negotiate/checkout, this endpoint does NOT auto-provision a
+    key for an unseen agent_id: mandate issuance is a sensitive,
+    high-trust operation, so identity must already be established via
+    /api/agents/register before a mandate can be requested.
+    """
+    trust_record = db.query(AgentTrustScore).filter(AgentTrustScore.agent_id == agent_id).first()
+    if not trust_record or not trust_record.agent_key_hash:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                f"Agent '{agent_id}' is not registered. "
+                "Call POST /api/agents/register first to obtain a key, "
+                "then retry with the X-Agent-Key header set."
+            )
+        )
+
+    key_str = x_agent_key if isinstance(x_agent_key, str) and x_agent_key.strip() else None
+    if not key_str or not secrets.compare_digest(trust_record.agent_key_hash, hash_agent_key(key_str)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Authentication failed for agent '{agent_id}'. Missing or invalid X-Agent-Key header."
+        )
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    valid_until = now + datetime.timedelta(minutes=req.valid_minutes)
+
+    mandate = BuyerMandate(
+        agent_id=agent_id,
+        sku=req.sku,
+        max_unit_price=req.max_unit_price,
+        max_discount_pct=req.max_discount_pct,
+        max_quantity=req.max_quantity,
+        valid_until=valid_until,
+        issued_at=now
+    )
+    signature = sign_mandate(mandate)
+
+    return MandateIssueResponse(mandate=mandate, mandate_signature=signature)
