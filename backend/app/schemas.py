@@ -266,6 +266,29 @@ class ChatResponse(BaseModel):
     razorpay_key_id: Optional[str] = None
     upsell_offer: Optional[Dict[str, Any]] = None
 
+# --- Growth Analytics Schemas (D2) ---
+class GrowthFunnel(BaseModel):
+    ads_generated: int
+    chat_sessions_started: int
+    negotiations_attempted: int
+    orders_completed: int
+    revenue_inr: float
+
+class NegotiationGroupStats(BaseModel):
+    total_orders: int
+    paid_orders: int
+    conversion_rate_pct: float
+    avg_discount_pct: float
+    revenue_inr: float
+
+class NegotiationImpact(BaseModel):
+    ai_negotiated: NegotiationGroupStats
+    flat_no_negotiation_baseline: NegotiationGroupStats
+
+class GrowthSummaryResponse(BaseModel):
+    funnel: GrowthFunnel
+    negotiation_impact: NegotiationImpact
+
 # --- Agent Identity Schemas (A1) ---
 class AgentRegisterRequest(BaseModel):
     agent_id: str = Field(..., min_length=1, max_length=100, description="Unique identifier the agent wants to operate under")

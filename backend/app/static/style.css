@@ -640,3 +640,68 @@ body {
 .text-accent { color: var(--accent); }
 .font-mono { font-family: var(--font-mono); }
 
+/* Growth & Revenue Analytics Tab (D2) */
+.growth-funnel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.growth-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.growth-stat-highlight {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.growth-stat-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.growth-stat-val {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.growth-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.growth-compare-col {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.growth-compare-col h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.growth-compare-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.growth-compare-row:last-child {
+  border-bottom: none;
+}
+

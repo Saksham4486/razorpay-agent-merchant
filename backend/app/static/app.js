@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAds();
   initAcp();
   initChaosLab();
+  initGrowthPanel();
   
   // Auto-refresh audit trail every 6 seconds
   setInterval(loadAuditTrail, 6000);
@@ -55,6 +56,7 @@ function initTabs() {
       if (targetId === 'audit-tab') loadAuditTrail();
       if (targetId === 'ads-tab') loadCatalogForAds();
       if (targetId === 'acp-tab') loadAcpFeed();
+      if (targetId === 'growth-tab') loadGrowthSummary();
     });
   });
 }
@@ -811,4 +813,66 @@ function escapeHtml(str) {
 
 function formatMarkdownLinks(str) {
   return str.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-accent" style="text-decoration: underline;">$1</a>');
+}
+
+// --- Growth & Revenue Analytics Panel (D2) ---
+function initGrowthPanel() {
+  const btn = document.getElementById('btn-refresh-growth');
+  if (btn) btn.addEventListener('click', loadGrowthSummary);
+}
+
+async function loadGrowthSummary() {
+  const funnelEl = document.getElementById('growth-funnel-container');
+  const comparisonEl = document.getElementById('growth-comparison-container');
+  if (!funnelEl || !comparisonEl) return;
+
+  try {
+    const res = await fetch('/api/growth/summary');
+    const data = await res.json();
+    const f = data.funnel;
+    const impact = data.negotiation_impact;
+
+    const fmtInr = (v) => `₹${Number(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+    funnelEl.innerHTML = `
+      <div class="growth-stat-card">
+        <span class="growth-stat-label">📢 Ads Generated</span>
+        <span class="growth-stat-val">${f.ads_generated}</span>
+      </div>
+      <div class="growth-stat-card">
+        <span class="growth-stat-label">💬 Chat Sessions Started</span>
+        <span class="growth-stat-val">${f.chat_sessions_started}</span>
+      </div>
+      <div class="growth-stat-card">
+        <span class="growth-stat-label">🤝 Negotiations Attempted</span>
+        <span class="growth-stat-val">${f.negotiations_attempted}</span>
+      </div>
+      <div class="growth-stat-card">
+        <span class="growth-stat-label">✅ Orders Completed</span>
+        <span class="growth-stat-val">${f.orders_completed}</span>
+      </div>
+      <div class="growth-stat-card growth-stat-highlight">
+        <span class="growth-stat-label">💰 Total Revenue</span>
+        <span class="growth-stat-val">${fmtInr(f.revenue_inr)}</span>
+      </div>
+    `;
+
+    const renderGroup = (label, g) => `
+      <div class="growth-compare-col">
+        <h5>${label}</h5>
+        <div class="growth-compare-row"><span>Total Orders</span><strong>${g.total_orders}</strong></div>
+        <div class="growth-compare-row"><span>Paid Orders</span><strong>${g.paid_orders}</strong></div>
+        <div class="growth-compare-row"><span>Conversion Rate</span><strong>${g.conversion_rate_pct}%</strong></div>
+        <div class="growth-compare-row"><span>Avg. Discount</span><strong>${g.avg_discount_pct}%</strong></div>
+        <div class="growth-compare-row"><span>Revenue</span><strong>${fmtInr(g.revenue_inr)}</strong></div>
+      </div>
+    `;
+
+    comparisonEl.innerHTML = `
+      ${renderGroup('🤖 AI-Negotiated Orders', impact.ai_negotiated)}
+      ${renderGroup('📌 Flat No-Negotiation Baseline', impact.flat_no_negotiation_baseline)}
+    `;
+  } catch (err) {
+    funnelEl.innerHTML = `<div class="empty-state">Failed to load growth summary: ${err.message}</div>`;
+  }
 }

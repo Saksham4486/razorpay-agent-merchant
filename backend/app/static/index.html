@@ -45,6 +45,7 @@
       <button class="nav-tab" data-tab="ads-tab">📢 Multilingual Ad Growth Engine</button>
       <button class="nav-tab" data-tab="acp-tab">🌐 ACP Feed & AP2 Mandates</button>
       <button class="nav-tab" data-tab="chaos-tab">⚡ Chaos Lab & Money Lifecycle</button>
+      <button class="nav-tab" data-tab="growth-tab">📈 Growth & Revenue</button>
     </nav>
 
     <!-- TAB 1: Audit Log & Policy Engine -->
@@ -303,6 +304,31 @@
         <div class="chaos-log-card">
           <h4>🧪 Chaos & Refund Telemetry</h4>
           <pre id="chaos-telemetry-output" class="console-output">Ready to execute failure and refund scenarios.</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 7: Growth & Revenue Analytics -->
+    <section class="tab-content" id="growth-tab">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>📈 Growth & Revenue Analytics</h2>
+            <p class="subtitle">Real numbers pulled directly from the Order and AuditLog tables - no placeholders. Refreshes as new activity happens.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-growth">🔄 Refresh</button>
+        </div>
+
+        <div class="growth-funnel-grid" id="growth-funnel-container">
+          <div class="empty-state">Loading growth summary...</div>
+        </div>
+
+        <div class="panel" style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); margin-top: 1.5rem;">
+          <h4>🤝 AI-Negotiated vs. Flat No-Negotiation Baseline</h4>
+          <p class="text-sm text-muted">Both groups are real orders from the same data: orders where a discount was requested vs. orders where none was.</p>
+          <div class="growth-comparison-grid" id="growth-comparison-container">
+            <div class="empty-state">Loading comparison...</div>
+          </div>
         </div>
       </div>
     </section>

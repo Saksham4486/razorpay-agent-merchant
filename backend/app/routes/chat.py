@@ -11,6 +11,7 @@ from backend.app.routes.negotiate import negotiate_price
 from backend.app.routes.checkout import create_checkout
 from backend.app.services.llm_service import llm_service
 from backend.app.services.upsell_service import evaluate_upsell_offer
+from backend.app.services.audit_service import record_audit_log
 from backend.app.config import settings
 
 router = APIRouter(prefix="/api/chat", tags=["Conversational Checkout"])
@@ -22,6 +23,23 @@ def handle_chat_message(req: ChatRequest, db: Session = Depends(get_db)):
     Parses intent via LLM tool calling, executes policy engine tools, and replies natively.
     """
     catalog_items = db.query(CatalogItem).all()
+
+    if len(req.messages) <= 1:
+        # First user turn of a fresh conversation thread (client resends full
+        # history each call) - real, non-fabricated signal for D2's growth
+        # panel funnel stage "chat sessions started".
+        record_audit_log(
+            db=db,
+            actor=f"ai_agent:{req.agent_id}" if req.agent_id and req.agent_id != "human_shopper" else "chat_human",
+            agent_id=req.agent_id if req.agent_id != "human_shopper" else None,
+            sku="N/A",
+            requested_discount=0.0,
+            order_value_inr=0.0,
+            policy_decision="approved",
+            reason="💬 New chat session started.",
+            status="chat_session_started"
+        )
+        db.commit()
 
     if not req.messages:
         lang = req.language if req.language != "auto" else "en"
