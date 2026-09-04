@@ -183,7 +183,7 @@ def run_llm_driven_buyer_agent(goal: str, api: MerchantAPIClient) -> bool:
 
     for turn in range(1, MAX_TURNS + 1):
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=contents,
             config=config
         )
