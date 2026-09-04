@@ -177,7 +177,7 @@ function initChat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: chatHistory,
-          agent_id: 'human_web_shopper',
+          agent_id: 'human_shopper',
           language: selectedLang
         })
       });
