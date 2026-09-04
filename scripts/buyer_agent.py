@@ -23,6 +23,7 @@ import sys
 import os
 import json
 import uuid
+import time
 import httpx
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,6 +31,8 @@ from backend.app.config import settings
 
 BASE_URL = os.getenv("BUYER_AGENT_BASE_URL", "http://127.0.0.1:8000")
 MAX_TURNS = 8
+LLM_CALL_MAX_RETRIES = 3
+LLM_CALL_RETRY_BASE_DELAY_SECONDS = 2
 
 DEFAULT_GOAL = "Buy the best workstation you can find for under ₹1,60,000, negotiating a discount if possible, and complete checkout."
 
@@ -148,6 +151,37 @@ def build_tool_declarations():
     ])
 
 
+def _call_gemini_with_retry(client, model: str, contents, config):
+    """
+    Retries transient failures (network blips like DNS resolution errors,
+    and 5xx/UNAVAILABLE responses from Gemini under high demand) with a
+    short exponential backoff. Does NOT retry genuine errors (bad request,
+    auth failure, invalid role, etc.) - those surface immediately so real
+    bugs aren't masked as flakiness.
+    """
+    last_error = None
+    for attempt in range(1, LLM_CALL_MAX_RETRIES + 1):
+        try:
+            return client.models.generate_content(model=model, contents=contents, config=config)
+        except Exception as e:
+            error_text = str(e)
+            is_transient = (
+                "UNAVAILABLE" in error_text
+                or "high demand" in error_text
+                or "name resolution" in error_text
+                or "Temporary failure" in error_text
+                or "timed out" in error_text.lower()
+                or "connection" in error_text.lower()
+            )
+            last_error = e
+            if not is_transient or attempt == LLM_CALL_MAX_RETRIES:
+                raise
+            delay = LLM_CALL_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+            print(f"⚠️ Transient error on attempt {attempt}/{LLM_CALL_MAX_RETRIES} ({error_text[:120]}); retrying in {delay}s...")
+            time.sleep(delay)
+    raise last_error
+
+
 def run_llm_driven_buyer_agent(goal: str, api: MerchantAPIClient) -> bool:
     """
     Real Gemini tool-calling loop. The model decides its own sequence of
@@ -182,10 +216,8 @@ def run_llm_driven_buyer_agent(goal: str, api: MerchantAPIClient) -> bool:
     }
 
     for turn in range(1, MAX_TURNS + 1):
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=contents,
-            config=config
+        response = _call_gemini_with_retry(
+            client, model="gemini-3.6-flash", contents=contents, config=config
         )
         candidate = response.candidates[0]
         contents.append(candidate.content)

@@ -155,3 +155,44 @@ def test_loop_respects_max_turns_bound():
 
     assert result is True
     assert instance.models.generate_content.call_count == 8  # MAX_TURNS
+
+
+def test_transient_network_error_is_retried_and_recovers():
+    """A transient DNS/network blip on the first attempt should be retried
+    and the loop should recover, not immediately fall back."""
+    api = _make_agent_client()
+
+    success_turn = _fake_response(_model_content(
+        text="Done.",
+        function_calls=[("finish", {"summary": "Nothing to do."})]
+    ))
+
+    with patch("google.genai.Client") as MockClient, patch("time.sleep"):
+        instance = MockClient.return_value
+        instance.models.generate_content.side_effect = [
+            Exception("[Errno -3] Temporary failure in name resolution"),
+            success_turn,
+        ]
+        result = run_llm_driven_buyer_agent("Trivial goal.", api)
+
+    assert result is True
+    assert instance.models.generate_content.call_count == 2
+
+
+def test_non_transient_error_is_not_retried():
+    """A genuine error (e.g. bad request) must surface immediately and
+    trigger the deterministic fallback, not be masked by retry logic."""
+    api = _make_agent_client()
+
+    with patch("google.genai.Client") as MockClient, patch("time.sleep"):
+        instance = MockClient.return_value
+        instance.models.generate_content.side_effect = Exception(
+            "400 INVALID_ARGUMENT: Role 'tool' is not supported."
+        )
+        try:
+            run_llm_driven_buyer_agent("Trivial goal.", api)
+            assert False, "expected exception to propagate"
+        except Exception as e:
+            assert "INVALID_ARGUMENT" in str(e)
+
+    assert instance.models.generate_content.call_count == 1
