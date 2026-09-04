@@ -224,7 +224,10 @@ def run_llm_driven_buyer_agent(goal: str, api: MerchantAPIClient) -> bool:
                 types.Part.from_function_response(name=fc.name, response={"result": result})
             )
 
-        contents.append(types.Content(role="tool", parts=response_parts))
+        # Function responses go back with role="user" per the current
+        # Gemini API (the older "tool" role string is no longer accepted -
+        # see 400 INVALID_ARGUMENT: "Role 'tool' is not supported").
+        contents.append(types.Content(role="user", parts=response_parts))
 
         if stop:
             return True
